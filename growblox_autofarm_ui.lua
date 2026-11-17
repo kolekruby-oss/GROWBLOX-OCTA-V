@@ -1,4 +1,4 @@
--- Growblox Auto Farm + UI (Xeno) v2
+-- Growblox Auto Farm + UI (Xeno) v3
 -- UI dibuat DULU, bagian game dibungkus pcall supaya error tampil di panel status.
 local RS = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
@@ -124,10 +124,38 @@ end)
 
 ------------------------------------------------------------ GAME (aman, pcall)
 task.spawn(function()
-    local ok, err = pcall(function()
-        Net = require(RS:WaitForChild("Shared", 15):WaitForChild("Net", 15))
-    end)
-    if not ok or not Net then netMsg = "GAGAL require: " .. tostring(err); return end
+    -- Cari modul Net (struktur live bisa beda dari Studio)
+    local function looksLikeNet(t)
+        return type(t) == "table" and t.act and t.take and t.move and t.tile
+    end
+    local function tryModule(m)
+        local ok, r = pcall(require, m)
+        if ok and looksLikeNet(r) then return r end
+    end
+    local found
+    local deadline = os.clock() + 20
+    while not found and os.clock() < deadline do
+        -- 1) modul bernama Net di mana saja
+        for _, m in ipairs(game:GetDescendants()) do
+            if m:IsA("ModuleScript") and m.Name == "Net" then
+                found = tryModule(m); if found then break end
+            end
+        end
+        -- 2) modul yang sudah ke-load (kalau executor mendukung)
+        if not found and getloadedmodules then
+            for _, m in ipairs(getloadedmodules()) do
+                if m.Name == "Net" then found = tryModule(m); if found then break end end
+            end
+        end
+        if not found then task.wait(1) end
+    end
+    if not found then
+        local names = {}
+        for _, c in ipairs(RS:GetChildren()) do table.insert(names, c.Name) end
+        netMsg = "GAGAL: modul Net tidak ketemu. RS: " .. table.concat(names, ", ")
+        return
+    end
+    Net = found
     netMsg = "OK"
 
     -- Posisi karakter dari paket move milik game
